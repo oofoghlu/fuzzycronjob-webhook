@@ -17,22 +17,56 @@ limitations under the License.
 package main
 
 import (
+	"context"
+	"encoding/json"
 	"flag"
+	"fmt"
+	"net/http"
 	"os"
 
 	// Import all Kubernetes client auth plugins (e.g. Azure, GCP, OIDC, etc.)
 	// to ensure that exec-entrypoint and run can make use of them.
 	_ "k8s.io/client-go/plugin/pkg/client/auth"
 
+	batchv1 "k8s.io/api/batch/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
 	ctrl "sigs.k8s.io/controller-runtime"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/healthz"
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
 	metricsserver "sigs.k8s.io/controller-runtime/pkg/metrics/server"
+	"sigs.k8s.io/controller-runtime/pkg/webhook"
+	"sigs.k8s.io/controller-runtime/pkg/webhook/admission"
 	//+kubebuilder:scaffold:imports
 )
+
+// +kubebuilder:webhook:path=/mutate-fuzzycronjob,mutating=true,failurePolicy=fail,groups="batch",resources=cronjobs,verbs=create;update,versions=v1,name=mcronjob.kb.io,admissionReviewVersions=v1,sideEffects=none
+
+type cronJobAnnotator struct {
+	Client client.Client
+	*admission.Decoder
+}
+
+func (a *cronJobAnnotator) Handle(ctx context.Context, req admission.Request) admission.Response {
+	cronJob := &batchv1.CronJob{}
+	fmt.Println("This is running")
+	err := a.Decoder.Decode(req, cronJob)
+	if err != nil {
+		return admission.Errored(http.StatusBadRequest, err)
+	}
+
+	// mutate the fields in pod
+	cronJob.Annotations["github.com.oofoghlu/mutated"] = "this-is-mutated"
+	cronJob.Spec.Schedule = "* * * * *"
+
+	marshaledCronJob, err := json.Marshal(cronJob)
+	if err != nil {
+		return admission.Errored(http.StatusInternalServerError, err)
+	}
+	return admission.PatchResponseFromRaw(req.Object.Raw, marshaledCronJob)
+}
 
 var (
 	scheme   = runtime.NewScheme()
@@ -67,7 +101,7 @@ func main() {
 		Metrics:                metricsserver.Options{BindAddress: metricsAddr},
 		HealthProbeBindAddress: probeAddr,
 		LeaderElection:         enableLeaderElection,
-		LeaderElectionID:       "fd3daf3f.github.com/oofoghlu",
+		LeaderElectionID:       "fd3daf3f.oofoghlu",
 		// LeaderElectionReleaseOnCancel defines if the leader should step down voluntarily
 		// when the Manager ends. This requires the binary to immediately end when the
 		// Manager is stopped, otherwise, this setting is unsafe. Setting this significantly
@@ -84,6 +118,12 @@ func main() {
 		setupLog.Error(err, "unable to start manager")
 		os.Exit(1)
 	}
+
+	mgr.GetWebhookServer().Register("/mutate-fuzzycronjob", &webhook.Admission{
+		Handler: &cronJobAnnotator{
+			Client:  mgr.GetClient(),
+			Decoder: admission.NewDecoder(mgr.GetScheme()),
+		}})
 
 	//+kubebuilder:scaffold:builder
 

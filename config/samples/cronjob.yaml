@@ -1,0 +1,29 @@
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  annotations:
+    github.com.oofoghlu/fuzzy-schedule: "H H * * *"
+  labels:
+    app.kubernetes.io/name: fuzzycronjob-webhook
+    app.kubernetes.io/instance: fuzzycronjob-sample
+    app.kubernetes.io/part-of: fuzzycronjob-webhook
+    app.kubernetes.io/managed-by: kustomize
+    app.kubernetes.io/created-by: fuzzycron
+  name: fuzzycronjob-sample
+spec:
+  # TODO(user): Add fields here
+  schedule: "4 5 * * *"
+  startingDeadlineSeconds: 60
+  concurrencyPolicy: Allow # explicitly specify, but Allow is also default.
+  jobTemplate:
+    spec:
+      template:
+        spec:
+          containers:
+          - name: hello
+            image: busybox
+            args:
+            - /bin/sh
+            - -c
+            - date; echo Hello from the Kubernetes cluster
+          restartPolicy: OnFailure
