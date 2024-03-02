@@ -5,4 +5,4 @@ kind: Kustomization
 images:
 - name: controller
   newName: cronjobcontroller
-  newTag: v5
+  newTag: v6

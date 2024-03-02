@@ -12,7 +12,7 @@ metadata:
   name: fuzzycronjob-sample
 spec:
   # TODO(user): Add fields here
-  schedule: "4 5 * * *"
+  schedule: "* 5 * * *"
   startingDeadlineSeconds: 60
   concurrencyPolicy: Allow # explicitly specify, but Allow is also default.
   jobTemplate:

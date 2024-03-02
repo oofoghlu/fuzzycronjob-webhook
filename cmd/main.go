@@ -20,9 +20,10 @@ import (
 	"context"
 	"encoding/json"
 	"flag"
-	"fmt"
 	"net/http"
 	"os"
+
+	"github.com/oofoghlu/fuzzycrontab"
 
 	// Import all Kubernetes client auth plugins (e.g. Azure, GCP, OIDC, etc.)
 	// to ensure that exec-entrypoint and run can make use of them.
@@ -51,15 +52,21 @@ type cronJobAnnotator struct {
 
 func (a *cronJobAnnotator) Handle(ctx context.Context, req admission.Request) admission.Response {
 	cronJob := &batchv1.CronJob{}
-	fmt.Println("This is running")
 	err := a.Decoder.Decode(req, cronJob)
 	if err != nil {
 		return admission.Errored(http.StatusBadRequest, err)
 	}
 
-	// mutate the fields in pod
-	cronJob.Annotations["github.com.oofoghlu/mutated"] = "this-is-mutated"
-	cronJob.Spec.Schedule = "* * * * *"
+	// mutate the fields in cronjob
+	fuzzySchedule, ok := cronJob.Annotations["github.com.oofoghlu/fuzzy-schedule"]
+
+	if ok {
+		schedule, err := fuzzycrontab.EvalCrontab(fuzzySchedule, req.Namespace+cronJob.Name)
+		if err != nil {
+			return admission.Errored(http.StatusBadRequest, err)
+		}
+		cronJob.Spec.Schedule = schedule
+	}
 
 	marshaledCronJob, err := json.Marshal(cronJob)
 	if err != nil {
